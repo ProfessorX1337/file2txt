@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File to TXT Converter</title>
+    
+    <!-- CDN Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 30px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f8f9ff;
+            transform: translateY(-2px);
+        }
+        
+        .upload-area.dragover {
+            border-color: #764ba2;
+            background: #f0f4ff;
+        }
+        
+        #fileInput {
+            display: none;
+        }
+        
+        .upload-text {
+            font-size: 1.2em;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .file-types {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .selected-file {
+            margin: 20px 0;
+            padding: 15px;
+            background: #e8f4f8;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .convert-btn {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 50px;
+            font-size: 1.1em;
+            cursor: pointer;
+            display: block;
+            margin: 20px auto;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+        
+        .convert-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .convert-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .progress {
+            margin: 20px 0;
+            text-align: center;
+            color: #667eea;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        
+        .download-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 1em;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: all 0.3s ease;
+        }
+        
+        .download-btn:hover {
+            background: #218838;
+            transform: translateY(-1px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📄 File to TXT Converter</h1>
+        
+        <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+            <div class="upload-text">📁 Click to select file or drag & drop</div>
+            <div class="file-types">Supports PDF, EPUB, and DOCX files</div>
+            <input type="file" id="fileInput" accept=".pdf,.epub,.docx" />
+        </div>
+        
+        <div id="selectedFile" class="selected-file" style="display: none;">
+            <strong>Selected file:</strong> <span id="fileName"></span>
+        </div>
+        
+        <button id="convertBtn" class="convert-btn" style="display: none;" onclick="convertFile()">
+            Convert to TXT
+        </button>
+        
+        <div id="progress" class="progress" style="display: none;">
+            <div class="spinner"></div>
+            <div id="progressText">Converting file...</div>
+        </div>
+        
+        <div id="result" class="result" style="display: none;"></div>
+    </div>
+
+    <script>
+        let selectedFile = null;
+        
+        // Set up PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        // File input handling
+        document.getElementById('fileInput').addEventListener('change', handleFileSelect);
+        
+        // Drag and drop handling
+        const uploadArea = document.querySelector('.upload-area');
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileSelect({ target: { files: files } });
+            }
+        });
+        
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const validTypes = ['.pdf', '.epub', '.docx'];
+            const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+            
+            if (!validTypes.includes(fileExtension)) {
+                showResult('Please select a PDF, EPUB, or DOCX file.', 'error');
+                return;
+            }
+            
+            selectedFile = file;
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('selectedFile').style.display = 'block';
+            document.getElementById('convertBtn').style.display = 'block';
+            document.getElementById('result').style.display = 'none';
+        }
+        
+        async function convertFile() {
+            if (!selectedFile) return;
+            
+            showProgress(true);
+            document.getElementById('convertBtn').disabled = true;
+            
+            try {
+                let text = '';
+                const fileExtension = '.' + selectedFile.name.split('.').pop().toLowerCase();
+                
+                if (fileExtension === '.pdf') {
+                    text = await convertPDF(selectedFile);
+                } else if (fileExtension === '.docx') {
+                    text = await convertDOCX(selectedFile);
+                } else if (fileExtension === '.epub') {
+                    text = await convertEPUB(selectedFile);
+                }
+                
+                if (text.trim()) {
+                    downloadTXT(text, selectedFile.name);
+                    showResult('✅ File converted successfully!', 'success');
+                } else {
+                    showResult('❌ No text content found in the file.', 'error');
+                }
+                
+            } catch (error) {
+                console.error('Conversion error:', error);
+                showResult(`❌ Error converting file: ${error.message}`, 'error');
+            } finally {
+                showProgress(false);
+                document.getElementById('convertBtn').disabled = false;
+            }
+        }
+        
+        async function convertPDF(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let text = '';
+            
+            for (let i = 1; i <= pdf.numPages; i++) {
+                document.getElementById('progressText').textContent = `Converting PDF page ${i} of ${pdf.numPages}...`;
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items.map(item => item.str).join(' ');
+                text += pageText + '\n\n';
+            }
+            
+            return text;
+        }
+        
+        async function convertDOCX(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+            return result.value;
+        }
+        
+        async function convertEPUB(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const zip = await JSZip.loadAsync(arrayBuffer);
+            let text = '';
+            
+            // Find and read content files
+            const contentFiles = [];
+            zip.forEach((relativePath, file) => {
+                if (relativePath.endsWith('.html') || relativePath.endsWith('.xhtml')) {
+                    contentFiles.push(file);
+                }
+            });
+            
+            for (let i = 0; i < contentFiles.length; i++) {
+                document.getElementById('progressText').textContent = `Converting EPUB section ${i + 1} of ${contentFiles.length}...`;
+                const content = await contentFiles[i].async('string');
+                // Remove HTML tags and decode entities
+                const textContent = content
+                    .replace(/<[^>]*>/g, ' ')
+                    .replace(/&nbsp;/g, ' ')
+                    .replace(/&amp;/g, '&')
+                    .replace(/&lt;/g, '<')
+                    .replace(/&gt;/g, '>')
+                    .replace(/&quot;/g, '"')
+                    .replace(/&#39;/g, "'")
+                    .replace(/\s+/g, ' ')
+                    .trim();
+                text += textContent + '\n\n';
+            }
+            
+            return text;
+        }
+        
+        function downloadTXT(text, originalFileName) {
+            const txtFileName = originalFileName.replace(/\.[^/.]+$/, '.txt');
+            const blob = new Blob([text], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = txtFileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+        
+        function showProgress(show) {
+            document.getElementById('progress').style.display = show ? 'block' : 'none';
+            if (!show) {
+                document.getElementById('progressText').textContent = 'Converting file...';
+            }
+        }
+        
+        function showResult(message, type) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.textContent = message;
+            resultDiv.className = `result ${type}`;
+            resultDiv.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
